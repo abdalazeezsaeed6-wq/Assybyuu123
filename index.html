@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>نظام الإدارة المحمي</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; max-width: 700px; margin: auto; margin-top: 20px; box-shadow: 0 0 10px #ccc; }
+        h2, h3 { text-align: center; color: #0d6efd; }
+        button { width: 100%; padding: 12px; margin-top: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; transition: 0.3s; }
+        button:hover { opacity: 0.8; }
+        .blue { background: #0d6efd; color: white; }
+        .green { background: #28a745; color: white; }
+        .red { background: #dc3545; color: white; }
+        .gray { background: #6c757d; color: white; }
+        input, select { width: 100%; padding: 10px; margin-top: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .hidden { display: none !important; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background: #eee; }
+        .shopCard { border: 1px solid #ddd; padding: 15px; margin-top: 10px; border-radius: 8px; background: #fff; }
+        .status-msg { text-align: center; color: #666; font-size: 0.9em; margin-top: 5px; }
+        #loginPage { max-width: 400px; margin-top: 100px; }
+    </style>
+</head>
+<body>
+
+<div id="loginPage" class="card">
+    <h2>تسجيل الدخول</h2>
+    <input type="text" id="loginUser" placeholder="اسم المستخدم">
+    <input type="password" id="loginPass" placeholder="كلمة المرور">
+    <button class="blue" onclick="checkLogin()">دخول</button>
+    <p id="loginError" style="color:red; text-align:center; display:none;">خطأ في البيانات!</p>
+</div>
+
+<div id="mainContent" class="hidden">
+    <div id="menu" class="card">
+        <h2>لوحة التحكم الإدارية</h2>
+        <button class="blue" onclick="show('entry')">إدخال الفواتير (إكسل / يدوي)</button>
+        <button class="blue" onclick="show('viewPage')">عرض وكشوفات الفواتير</button>
+        <button class="blue" onclick="show('shopsPage');loadShops();">إدارة محلات التسديد</button>
+        <button class="gray" onclick="show('settingsPage')">إعدادات الحساب</button>
+        <button class="red" onclick="deleteAll()">مسح كافة الفواتير</button>
+        <button style="background:#000; color:#fff;" onclick="location.reload()">تسجيل خروج</button>
+    </div>
+
+    <div id="settingsPage" class="card hidden">
+        <h3>تغيير بيانات الدخول</h3>
+        <input id="newUserName" placeholder="اسم المستخدم الجديد">
+        <input type="password" id="newUserPass" placeholder="كلمة المرور الجديدة">
+        <button class="green" onclick="updateAdminData()">حفظ التعديلات</button>
+        <button class="gray" onclick="show('menu')">رجوع</button>
+    </div>
+
+    <div id="entry" class="card hidden">
+        <h3>رفع وتوريد الفواتير</h3>
+        <button class="blue" onclick="document.getElementById('excel').click()">رفع ملف Excel</button>
+        <input type="file" id="excel" class="hidden" accept=".xlsx,.xls" onchange="uploadExcel(event)">
+        <div id="uploadStatus" class="status-msg"></div>
+        <button class="green" onclick="show('manual')">إدخال فاتورة واحدة يدوياً</button>
+        <button class="gray" onclick="show('menu')">رجوع للقائمة</button>
+    </div>
+
+    <div id="manual" class="card hidden">
+        <h3>إضافة فاتورة جديدة</h3>
+        <select id="type" onchange="updateBranch()">
+            <option value="Electricity">كهرباء</option>
+            <option value="Water">ماء</option>
+        </select>
+        <select id="branch"></select>
+        <input id="id" placeholder="رقم المشترك">
+        <input id="name" placeholder="اسم المشترك">
+        <input id="amount" placeholder="المبلغ">
+        <button class="green" onclick="saveBill()">حفظ في قاعدة البيانات</button>
+        <button class="gray" onclick="show('entry')">رجوع</button>
+    </div>
+
+    <div id="viewPage" class="card hidden">
+        <h3>عرض البيانات المخزنة</h3>
+        <button class="blue" onclick="loadData('Electricity')">عرض كشف الكهرباء</button>
+        <button class="blue" onclick="loadData('Water')">عرض كشف المياه</button>
+        <button class="gray" onclick="show('menu')">رجوع</button>
+    </div>
+
+    <div id="tablePage" class="card hidden" style="max-width: 90%;">
+        <h3>البيانات المستعلمة</h3>
+        <input id="search" placeholder="بحث..." onkeyup="searchTable()">
+        <div style="overflow-x: auto;">
+            <table>
+                <thead><tr><th>الفرع</th><th>الرقم</th><th>الاسم</th><th>المبلغ</th></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <button class="gray" onclick="show('viewPage')">رجوع</button>
+    </div>
+
+    <div id="shopsPage" class="card hidden">
+        <h3>إدارة محلات التسديد</h3>
+        <input id="shopName" placeholder="اسم المحل">
+        <input id="shopPhone" placeholder="رقم الجوال">
+        <input id="shopLink" placeholder="رابط الموقع">
+        <button class="green" onclick="saveShop()">حفظ المحل</button>
+        <div id="shopsList"></div>
+        <button class="gray" onclick="show('menu')">رجوع</button>
+    </div>
+</div>
+
+<script>
+    const DB = "https://question-738f7-default-rtdb.firebaseio.com";
+    let adminData = { user: "عبدالعزيز", pass: "123" };
+
+    // تحميل بيانات المسؤول عند فتح الصفحة
+    async function fetchAdminConfig() {
+        try {
+            let res = await fetch(`${DB}/AdminConfig.json`);
+            let data = await res.json();
+            if (data) adminData = data;
+        } catch (e) { console.log("First time or error"); }
+    }
+    fetchAdminConfig();
+
+    async function checkLogin() {
+        const u = document.getElementById("loginUser").value;
+        const p = document.getElementById("loginPass").value;
+        
+        if (u === adminData.user && p === adminData.pass) {
+            document.getElementById("loginPage").classList.add("hidden");
+            document.getElementById("mainContent").classList.remove("hidden");
+        } else {
+            document.getElementById("loginError").style.display = "block";
+        }
+    }
+
+    async function updateAdminData() {
+        const newUser = document.getElementById("newUserName").value;
+        const newPass = document.getElementById("newUserPass").value;
+
+        if (!newUser || !newPass) { alert("يرجى ملء الحقول"); return; }
+
+        if (confirm("هل أنت متأكد من تغيير بيانات الدخول؟")) {
+            await fetch(`${DB}/AdminConfig.json`, {
+                method: "PUT",
+                body: JSON.stringify({ user: newUser, pass: newPass })
+            });
+            alert("تم التغيير بنجاح، سيتم إعادة تحميل الصفحة");
+            location.reload();
+        }
+    }
+
+    // الدوال الأصلية (تم الإبقاء عليها كما هي)
+    function show(id) {
+        document.querySelectorAll(".card").forEach(c => {
+            if(c.id !== 'loginPage') c.classList.add("hidden");
+        });
+        document.getElementById(id).classList.remove("hidden");
+        if (id == "manual") updateBranch();
+    }
+
+    function cleanData(val) {
+        if (!val) return "";
+        let str = val.toString().trim();
+        return str.replace(/[٠-٩]/g, d => d.charCodeAt(0) - 1632).replace(/[۰-۹]/g, d => d.charCodeAt(0) - 1776);
+    }
+
+    function updateBranch() {
+        let t = document.getElementById("type").value;
+        let b = document.getElementById("branch");
+        b.innerHTML = "";
+        let branches = (t == "Electricity") 
+            ? ["حضرموت الوادي والصحراء", "حضرموت ساحل"] 
+            : ["فرع الشحر", "فرع سيؤن", "فرع ساه", "فرع شبام", "فرع القطن", "فرع المكلا", "فرع الديس الشرقية", "فرع تريم", "فرع الريدة وقصيعر", "فرع ميفع وحجر", "فرع غيل باوزير"];
+        branches.forEach(x => { let opt = document.createElement("option"); opt.value = x; opt.innerText = x; b.appendChild(opt); });
+    }
+
+    async function saveBill() {
+        let t = document.getElementById("type").value;
+        let b = document.getElementById("branch").value;
+        let id = cleanData(document.getElementById("id").value);
+        let name = document.getElementById("name").value.trim();
+        let amount = cleanData(document.getElementById("amount").value);
+        if (!id || !name) { alert("يرجى إكمال الحقول"); return; }
+        await fetch(`${DB}/Bills/${encodeURIComponent(t)}/${encodeURIComponent(b)}/${encodeURIComponent(id)}.json`, {
+            method: "PUT", body: JSON.stringify({ customerName: name, amount: amount })
+        });
+        alert("تم الحفظ");
+    }
+
+    async function uploadExcel(e) {
+        let file = e.target.files[0];
+        if (!file) return;
+        document.getElementById("uploadStatus").innerText = "جاري الرفع...";
+        let reader = new FileReader();
+        reader.onload = async function(ev) {
+            let data = new Uint8Array(ev.target.result);
+            let workbook = XLSX.read(data, { type: 'array' });
+            let sheet = workbook.Sheets[workbook.SheetNames[0]];
+            let rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            for (let i = 0; i < rows.length; i++) {
+                let r = rows[i]; if (!r || r.length < 3) continue;
+                let type = r[0]?.toString().includes("كهرباء") ? "Electricity" : "Water";
+                let branch = cleanData(r[1]), id = cleanData(r[2]), amount = cleanData(r[3]), name = r[4] || "غير مسجل";
+                await fetch(`${DB}/Bills/${encodeURIComponent(type)}/${encodeURIComponent(branch)}/${encodeURIComponent(id)}.json`, {
+                    method: "PUT", body: JSON.stringify({ customerName: name, amount: amount })
+                });
+            }
+            alert("تم الرفع بنجاح");
+            location.reload();
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    async function loadData(type) {
+        let res = await fetch(`${DB}/Bills/${type}.json`);
+        let data = await res.json();
+        let body = document.getElementById("tableBody");
+        body.innerHTML = "";
+        if (!data) { alert("لا توجد بيانات"); return; }
+        for (let b in data) {
+            for (let id in data[b]) {
+                body.innerHTML += `<tr><td>${b}</td><td>${id}</td><td>${data[b][id].customerName}</td><td>${data[b][id].amount}</td></tr>`;
+            }
+        }
+        show("tablePage");
+    }
+
+    function searchTable() {
+        let val = document.getElementById("search").value.toLowerCase();
+        document.querySelectorAll("#tableBody tr").forEach(r => {
+            r.style.display = r.innerText.toLowerCase().includes(val) ? "" : "none";
+        });
+    }
+
+    async function deleteAll() {
+        if (confirm("حذف كل الفواتير نهائياً؟")) {
+            await fetch(`${DB}/Bills.json`, { method: "DELETE" });
+            alert("تم المسح");
+        }
+    }
+
+    async function saveShop() {
+        let n = document.getElementById("shopName").value, p = document.getElementById("shopPhone").value, l = document.getElementById("shopLink").value;
+        if(!n || !p) return;
+        await fetch(`${DB}/PaymentLocations/${Date.now()}.json`, {
+            method: "PUT", body: JSON.stringify({ name: n, phone: p, link: l })
+        });
+        loadShops();
+    }
+
+    async function loadShops() {
+        let res = await fetch(`${DB}/PaymentLocations.json`);
+        let data = await res.json();
+        let box = document.getElementById("shopsList");
+        box.innerHTML = "";
+        for (let id in data) {
+            box.innerHTML += `<div class="shopCard"><b>${data[id].name}</b><br>📞 ${data[id].phone}<br>
+            <button class="red" onclick="deleteShop('${id}')">حذف</button></div>`;
+        }
+    }
+
+    async function deleteShop(id) {
+        if(confirm("حذف؟")) { await fetch(`${DB}/PaymentLocations/${id}.json`, { method: "DELETE" }); loadShops(); }
+    }
+</script>
+
+</body>
+</html>
